@@ -1,4 +1,5 @@
 [![Maven Package](https://github.com/daureslaurent/Spring-StreamBox/actions/workflows/maven-publish.yml/badge.svg)](https://github.com/daureslaurent/Spring-StreamBox/actions/workflows/maven-publish.yml)
+[![Lib Tag](https://github.com/daureslaurent/Spring-StreamBox/actions/workflows/maven-publish-tag.yml/badge.svg)](https://github.com/daureslaurent/Spring-StreamBox/actions/workflows/maven-publish-tag.yml)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.0.2-6DB33F?style=flat-square&logo=springboot)
 ![Event Driven](https://img.shields.io/badge/Event_Driven-orange?style=flat-square)
 ![Outbox/Inbox](https://img.shields.io/badge/Outbox--Inbox-lightgrey?style=flat-square&logo=database)
