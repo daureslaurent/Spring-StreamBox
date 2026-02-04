@@ -41,8 +41,17 @@ jobs:
       - name: Bump to next SNAPSHOT version
         run: |
           CURRENT=${GITHUB_REF_NAME}
-          NEXT=$(echo $CURRENT | awk -F. '{ $NF+=1; OFS="."; print }')
-          mvn -B versions:set -DnewVersion=$NEXT-SNAPSHOT -DgenerateBackupPoms=false
+          
+          # Remove leading v and any suffix like -SNAPSHOT
+          CLEAN=${CURRENT#v}
+          CLEAN=${CLEAN%%-*}
+          
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CLEAN"
+          NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
+          
+          mvn -B versions:set \
+            -DnewVersion="${NEXT}-SNAPSHOT" \
+            -DgenerateBackupPoms=false
 
       - name: Commit snapshot + README update
         run: |
