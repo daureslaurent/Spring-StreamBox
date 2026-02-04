@@ -68,4 +68,4 @@ jobs:
           git add pom.xml README.md
           git commit -m "chore: release $CLEAN and bump to $NEXT-SNAPSHOT"
           
-          git push origin HEAD:main
+          git push origin HEAD:master
