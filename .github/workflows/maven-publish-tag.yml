@@ -55,8 +55,17 @@ jobs:
 
       - name: Commit snapshot + README update
         run: |
+          CURRENT=${GITHUB_REF_NAME}
+          CLEAN=${CURRENT#v}
+          CLEAN=${CLEAN%%-*}
+          
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CLEAN"
+          NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
+          
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
+          
           git add pom.xml README.md
-          git commit -m "chore: release $CURRENT and bump to $NEXT-SNAPSHOT"
-          git push
+          git commit -m "chore: release $CLEAN and bump to $NEXT-SNAPSHOT"
+          
+          git push origin HEAD:main
