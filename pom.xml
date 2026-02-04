@@ -103,6 +103,11 @@
 			<name>GitHub Packages</name>
 			<url>https://maven.pkg.github.com/daureslaurent/Spring-StreamBox/</url>
 		</snapshotRepository>
+		<repository>
+			<id>github</id>
+			<name>GitHub Packages</name>
+			<url>https://maven.pkg.github.com/daureslaurent/Spring-StreamBox/</url>
+		</repository>
 	</distributionManagement>
 
 </project>
