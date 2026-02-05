@@ -1,5 +1,6 @@
 package com.lda.streambox.port;
 
+import com.lda.streambox.entity.StreamBoxBaseEntity;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -10,12 +11,12 @@ import java.util.List;
  * <p>
  * Typical lifecycle:
  * <ol>
- *   <li>{@link #addToBox(Object)} - enqueue an event into the stream box.</li>
+ *   <li>{@link #addToBox(T extends StreamBoxBaseEntity)} - enqueue an event into the stream box.</li>
  *   <li>{@link #lockNextBatch(int)} - atomically claim a batch of pending events for processing.</li>
  *   <li>For each claimed event:
  *     <ul>
- *       <li>Execute business logic in {@link #handleStreamBox(Object)} (ideally idempotent).</li>
- *       <li>Mark the event as completed via {@link #finish(Object)} to prevent reprocessing.</li>
+ *       <li>Execute business logic in {@link #handleStreamBox(T extends StreamBoxBaseEntity)} (ideally idempotent).</li>
+ *       <li>Mark the event as completed via {@link #finish(T extends StreamBoxBaseEntity)} to prevent reprocessing.</li>
  *     </ul>
  *   </li>
  * </ol>
@@ -26,19 +27,19 @@ import java.util.List;
  *       {@link #lockNextBatch(int)} provides exclusive ownership of the returned events.</li>
  *   <li>Processing should be idempotent; failures must not corrupt state. Unfinished events
  *       should become eligible for re-delivery after a timeout or transaction rollback.</li>
- *   <li>{@link #handleStreamBox(Object)} is annotated with {@code @Transactional} to emphasize
+ *   <li>{@link #handleStreamBox(T extends StreamBoxBaseEntity)} is annotated with {@code @Transactional} to emphasize
  *       that event handling is typically atomic with side-effects and state transitions.</li>
  * </ul>
  *
  * @param <T> The concrete event type stored and processed by the stream box.
  */
-public interface StreamBoxInput<T> {
+public interface StreamBoxInput<T extends StreamBoxBaseEntity> {
 
     /**
      * Attempts to exclusively lock and return up to {@code limit} pending events for processing.
      * Locked events must not be returned to other callers until either:
      * <ul>
-     *   <li>They are finished via {@link #finish(Object)}; or</li>
+     *   <li>They are finished via {@link #finish(T extends StreamBoxBaseEntity)}; or</li>
      *   <li>The lock is released/expired due to rollback or lease timeout (implementation-defined).</li>
      * </ul>
      * <p>
@@ -93,13 +94,13 @@ public interface StreamBoxInput<T> {
      * Recommended flow inside implementations:
      * <ol>
      *   <li>Apply idempotent business logic (e.g., publish to a broker, call a downstream service, mutate state).</li>
-     *   <li>On success, call {@link #finish(Object)} to mark the event as completed.</li>
+     *   <li>On success, call {@link #finish(T extends StreamBoxBaseEntity)} to mark the event as completed.</li>
      *   <li>On failure, throw an exception to trigger transaction rollback; the event remains eligible for retry.</li>
      * </ol>
      * <p>
      * Transactionality:
      * <ul>
-     *   <li>Atomicity between business side-effects and {@link #finish(Object)} is strongly encouraged.</li>
+     *   <li>Atomicity between business side-effects and {@link #finish(T extends StreamBoxBaseEntity)} is strongly encouraged.</li>
      *   <li>Outbox pattern: write side-effects to a durable outbox within the same transaction, then publish asynchronously.</li>
      * </ul>
      *
