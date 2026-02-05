@@ -1,5 +1,7 @@
 package com.lda.streambox.port;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 
 public interface StreamBoxInput<T> {
@@ -10,4 +12,6 @@ public interface StreamBoxInput<T> {
 
     void addToBox(T streamBoxEvent);
 
+    @Transactional
+    void handleStreamBox(T streamBoxEvent);
 }
