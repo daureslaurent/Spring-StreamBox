@@ -4,24 +4,28 @@
 ![Event Driven](https://img.shields.io/badge/Event_Driven-orange?style=flat-square)
 ![Outbox/Inbox](https://img.shields.io/badge/Outbox--Inbox-lightgrey?style=flat-square&logo=database)
 
-# StreamBox
+# 📦 StreamBox — Inbox/Outbox Framework for Spring Boot
+*A lightweight, type‑safe, event‑driven framework for relational databases.*
 
-**StreamBox** is a lightweight library for managing **outbox and inbox events** in a CQRS-style architecture. It simplifies batching, JSON serialization, and transactional processing of events in a Spring Boot + JPA application.
+StreamBox implements the **Inbox / Outbox pattern**, enabling safe asynchronous event processing for CQRS, projections, and inter‑service communication.
+
+It provides:
+
+- Event entities and repositories
+- JSON serialization / deserialization
+- Event type registry
+- Inbox & Outbox adapters
+- Clean event projection handlers
+- **SmartLifecycle-based schedulers**
+- Highly configurable scheduling per type or instance
 
 ---
 
-## Features
+# 🚀 Quick Start
 
-* Generic support for any event payload.
-* Easy integration with Spring Boot.
-* Batch processing with **row-level locking** (`FOR UPDATE SKIP LOCKED`) for parallel consumers.
-* JSON serialization/deserialization of payloads.
-* Extensible entity base classes for auditing and status tracking.
-* Lightweight, zero-dependency beyond Spring Boot and Jackson.
+## 1. Add maven the dependency
 
----
-
-## Maven Dependency
+### Maven Dependency
 
 ```xml
 <dependency>
@@ -31,105 +35,251 @@
 </dependency>
 ```
 
+## 🧩 2. Define an Inbox or Outbox entity
+
+```java
+@RequiredArgsConstructor
+@Data
+@SuperBuilder
+@Entity(name = "PRODUCT_INBOX")
+@Table(name = "PRODUCT_INBOX")
+public class ProductInboxEventEntity extends StreamBoxBasePayloadEntity {
+
+    @Column(nullable = false, unique = true)
+    private UUID refOutbox;
+}
+```
+
 ---
 
-## Quick Start
+## 📦 3. Define your events
 
-### 1. Define your event entity
-
-Extend `StreamBoxBasePayloadEntity`:
+Each event must implement `StreamBoxEvent`  
+and declare its type with `@StreamBoxEventType`.
 
 ```java
-import com.lda.streambox.entity.StreamBoxBasePayloadEntity;
-import jakarta.persistence.Entity;
-
-@Entity
-public class OrderEventEntity extends StreamBoxBasePayloadEntity {
-    // Optional: extra fields specific to your event
-}
+@Builder
+@StreamBoxEventType("ProductChangeQuantityEvent")
+public record ProductChangeQuantityEvent(
+        UUID idProduct,
+        Integer changeValue,
+        boolean isIncrease
+) implements StreamBoxEvent {}
 ```
 
-### 2. Create a repository
+---
+
+## 🗃️ 4. Create your repository
 
 ```java
-import com.lda.streambox.repository.StreamBoxRepository;
-import org.springframework.stereotype.Repository;
-
 @Repository
-public interface OrderEventRepository extends StreamBoxRepository<OrderEventEntity> {
-}
+@Transactional(transactionManager = "readTransactionManager")
+public interface ProductInboxRepository extends StreamBoxRepository<ProductInboxEventEntity> {}
 ```
 
-### 3. Consume events
+---
+
+## 🏭 5. Create an InboxFactory
 
 ```java
-import com.lda.streambox.port.StreamBoxInput;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+@Component
+public class InboxFactory extends InboxFactoryAbstract<ProductInboxEventEntity, StreamBoxEvent> {
 
-import java.util.List;
-
-@Service
-public class OrderEventProcessor implements StreamBoxInput<OrderEventEntity> {
-
-    private final OrderEventRepository repository;
-
-    public OrderEventProcessor(OrderEventRepository repository) {
-        this.repository = repository;
+    public InboxFactory(StreamBoxEventRegistry registry) {
+        super(registry, ProductInboxEventEntity.class);
     }
 
     @Override
-    @Transactional
-    public List<OrderEventEntity> lockNextBatch(int limit) {
-        return repository.lockNextBatch(limit);
-    }
-
-    @Override
-    @Transactional
-    public void finish(OrderEventEntity event) {
-        event.setStatus(StreamBoxBaseStatusEnum.PROCESSED);
-        repository.save(event);
+    public ProductInboxEventEntity createEntity(String json, JsonConverter jsonConverter) {
+        ProductInboxEventEntity entity = jsonConverter.fromJson(json, ProductInboxEventEntity.class);
+        entity.setRefOutbox(entity.getId());
+        entity.setId(null);
+        return entity;
     }
 }
 ```
 
-### 4. Sending events
+---
+
+## 🧠 6. Implement your Inbox Adapter
 
 ```java
-import com.lda.streambox.entity.StreamBoxBasePayloadEntity;
-import com.lda.streambox.json.JsonConverter;
+@Slf4j
+public class ProductInboxAdapter extends InboxAdapter<ProductInboxEventEntity, StreamBoxEvent> {
 
+    private final ProductProjectionAdapter projections;
+
+    public ProductInboxAdapter(
+            JsonConverter jsonConverter,
+            StreamBoxRepository<ProductInboxEventEntity> repository,
+            InboxFactory factory,
+            ProductProjectionAdapter projections
+    ) {
+        super(jsonConverter, repository, factory);
+        this.projections = projections;
+    }
+
+    @Transactional(transactionManager = "readTransactionManager")
+    public void doHandle(ProductInboxEventEntity entity) {
+        this.handleEvent(entity);
+    }
+
+    @Override
+    protected void handleProjection(StreamBoxEvent event) {
+        switch (event) {
+            case ProductCreateEvent e -> projections.createProductProjection(e);
+            case ProductChangeQuantityEvent e -> projections.changeQuantityProjection(e);
+            default -> log.error("Event type not handled: {}", event);
+        }
+    }
+}
+```
+
+---
+
+## ⚙️ 7. Register the StreamBox module
+
+```java
+@Configuration
+@EnableScheduling
+@StreamBox(
+        type = StreamBoxType.INBOX,
+        scanBasePackages = {"my.app.market.infra.persistence.projection"}
+)
+public class StreamBoxConfig {
+
+    @Bean
+    public ProductInboxAdapter productInboxAdapter(
+            JsonConverter jsonConverter,
+            StreamBoxRepository<ProductInboxEventEntity> repository,
+            InboxFactory factory,
+            ProductProjectionAdapter projectionAdapter
+    ) {
+        return new ProductInboxAdapter(jsonConverter, repository, factory, projectionAdapter);
+    }
+
+}
+```
+
+---
+
+## ⏱️ 8. Configure SmartLifecycle Schedulers
+
+Schedulers run automatically and poll Inbox/Outbox tables.
+
+Enable:
+
+```yaml
+streambox:
+  scheduler:
+    enabled: true
+
+    defaults:
+      fixed-rate: PT7S
+      initial-delay: PT1S
+      limit: 5
+```
+
+Override per **type**:
+
+```yaml
+streambox:
+  scheduler:
+    types:
+      inbox:
+        fixed-rate: PT5S
+        limit: 200
+      outbox:
+        fixed-rate: PT10S
+        limit: 50
+```
+
+Override per **instance** (bean name):
+
+```yaml
+streambox:
+  scheduler:
+    instances:
+      productInboxAdapter:
+        fixed-rate: PT2S
+        limit: 500
+      orderOutboxAdapter:
+        fixed-rate: "3000"
+```
+
+---
+
+## 🔄 9. Producing events (Outbox)
+
+```java
 @Service
-public class OrderEventPublisher {
+public class ProductPublisher {
 
-    private final OrderEventRepository repository;
+    private final ProductInboxAdapter productInboxAdapter;
     private final JsonConverter jsonConverter;
 
-    public OrderEventPublisher(OrderEventRepository repository, JsonConverter jsonConverter) {
-        this.repository = repository;
-        this.jsonConverter = jsonConverter;
-    }
-
     public void publish(Object payload, String type) {
+        productInboxAdapter.addFromConsumer();
         String json = jsonConverter.toJson(payload);
-        OrderEventEntity entity = OrderEventEntity.builder()
-                .type(type)
-                .payload(json)
-                .build();
-        repository.save(entity);
+        productInboxAdapter.addFromConsumer(json);
     }
 }
 ```
 
 ---
 
-## Configuration
+## 🛠️ 10. Testing StreamBox (manual consumption)
 
-StreamBox uses **Spring Boot autoconfiguration**:
+Disable automatic scheduling:
 
-It provides a `JsonConverter` bean automatically if Jackson is on the classpath.
+```yaml
+spring.task.scheduling.enabled=false
+streambox.scheduler.enabled=true
+```
+
+Then use the Scheduler Registry:
+
+```java
+@Autowired
+StreamBoxSchedulerRegistry registry;
+
+@Test
+void testProcessing() {
+    var outbox = registry.get("productOutboxAdapter");
+    var inbox  = registry.get("productInboxAdapter");
+
+    outbox.consume(5);
+    fakeKafka.fakeMessaging();
+    inbox.consume(5);
+}
+```
 
 ---
+
+# 🧱 Architecture
+
+```
+ ┌───────────────┐
+ │  Outbox Table  │◄── save event in write transaction
+ └───────┬───────┘
+         │
+         ▼
+   Outbox Scheduler (SmartLifecycle)
+         │
+         ▼
+  External Transport (Kafka, REST, FakeKafka…)
+         │
+         ▼
+ ┌───────────────┐
+ │  Inbox Table   │
+ └───────┬───────┘
+         │
+         ▼
+   Inbox Scheduler
+         │
+         ▼
+   Projection Handler
+```
 
 ## Recommended Practices
 
@@ -141,11 +291,7 @@ It provides a `JsonConverter` bean automatically if Jackson is on the classpath.
 
 ## Future Updates
 
-* Support for automatic scheduled event processing.
 * Retry and dead-letter queue (DLQ) support for failed events.
-* Enhanced auditing with `processedAt` and `attemptCount` fields.
-* Integration with messaging systems like RabbitMQ or Kafka.
-* Customizable batch size and concurrency configuration.
 
 ---
 
