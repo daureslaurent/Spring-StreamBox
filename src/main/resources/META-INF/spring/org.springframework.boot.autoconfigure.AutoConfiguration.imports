@@ -1,1 +1,2 @@
 com.lda.streambox.autoconfig.StreamBoxAutoConfiguration
+com.lda.streambox.autoconfig.StreamBoxSchedulersAutoConfiguration
