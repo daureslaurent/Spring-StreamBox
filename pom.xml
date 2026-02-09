@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.lda</groupId>
 	<artifactId>streambox</artifactId>
-	<version>0.1.1-SNAPSHOT</version>
+	<version>0.2.1-SNAPSHOT</version>
 	<name>streambox</name>
 	<description>CQRS event library with outbox/inbox support for Spring Boot.</description>
 	<url/>
